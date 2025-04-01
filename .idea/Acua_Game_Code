@@ -1,1 +1,218 @@
+import pygame
+import random
+import math
+import time
+import os
+
+# Инициализация Pygame
+pygame.init()
+pygame.display.init()
+pygame.mixer.init()
+
+# Определение текущей операционной системы
+if os.name == "nt":
+    sound_dir = "C:\\WINDOWS\\Media"
+else:
+    sound_dir = "/System/Library/Sounds"
+
+# Получение списка звуковых файлов
+sound_files = [f for f in os.listdir(sound_dir) if f.endswith('.wav') or f.endswith('.mp3')]
+sound_file = random.choice(sound_files)
+sound_path = os.path.join(sound_dir, sound_file)
+pygame.mixer.music.load(sound_path)
+pygame.mixer.music.play(-1)
+
+# Установка размеров экрана
+screen_width = 800
+screen_height = 600
+screen = pygame.display.set_mode((screen_width, screen_height))
+
+# Установка цветов
+white = (255, 255, 255)
+blue = (0, 0, 255)
+red = (255, 0, 0)
+black = (0, 0, 0)
+
+# Создание списка для капель
+drops = []
+
+# Создание персонажа
+player_size = 10
+player_pos = [screen_width // 2, screen_height // 1.1]
+
+# Счетчик очков и времени
+score = 0
+start_time = time.time()
+
+# Окно проигрыша
+game_over = False
+game_over_rect = pygame.Rect(0, screen_height, screen_width, 100)
+game_over_text = pygame.font.SysFont(None, 50).render("Вы проиграли!", True, black)
+
+def generate_background():
+    background = pygame.Surface((screen_width, screen_height))
+    background.fill((0, 0, 0))
+    return background
+
+def handle_events():
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            return False
+        if game_over and event.type == pygame.MOUSEBUTTONDOWN:
+            if game_over_rect.collidepoint(event.pos):
+                return False
+    return True
+
+def add_new_drops():
+    if len(drops) < 200 and not game_over:
+        x = random.randint(0, screen_width)
+        y = 0
+        angle = random.uniform(0, 30 * math.pi)
+        speed = random.uniform(0, 0.35)
+        drops.append((x, y, angle, speed))
+
+def update_drops():
+    if not game_over:
+        for i in range(len(drops)):
+            x, y, angle, speed = drops[i]
+            x += speed * math.cos(angle)
+            y += speed * math.sin(angle)
+            drops[i] = (x, y, angle, speed)
+
+def remove_out_of_screen_drops():
+    for drop in drops:
+        if drop[1] >= screen_height:
+            score += 1
+    drops = [drop for drop in drops if drop[1] < screen_height]
+
+def handle_player_movement():
+    if keys[pygame.K_UP]:
+        player_pos[1] -= 0.2
+    if keys[pygame.K_DOWN]:
+        player_pos[1] += 0.2
+
+def check_collision():
+    for drop in drops:
+        drop_x, drop_y, _, _ = drop
+        drop_size = max(15, 40 - int(drop[3] * 1000))
+        if (player_pos[0] < drop_x + drop_size // 2 and
+                player_pos[0] + player_size > drop_x - drop_size // 2 and
+                player_pos[1] < drop_y + drop_size // 2 and
+                player_pos[1] + player_size > drop_y - drop_size // 2):
+            game_over = True
+            game_over_text = pygame.font.SysFont(None, 50).render("Вы проиграли!", True, black)
+
+def check_win_condition():
+    if player_pos[1] <= 0:
+        game_over = True
+        game_over_text = pygame.font.SysFont(None, 50).render("Вы победили!", True, black)
+
+def draw_drops():
+    for drop in drops:
+        x, y, angle, speed = drop
+
+        # Размер и параметры детализации
+        base_size = 40
+        size = max(15, base_size - int(speed * 1000))
+        detail = 8  # Количество дополнительных точек для детализации
+
+        # Основные точки капли
+        main_points = [
+            (x, y - size // 3),  # Верхняя точка
+            (x + size // 3, y + size // 2),
+            (x - size // 3, y + size // 2),
+            (x, y + size)  # Нижняя точка
+        ]
+
+        # Дополнительные точки для создания объемного эффекта
+        extra_points = []
+        for i in range(1, detail + 1):
+            angle = math.pi * 2 * i / (detail + 1)
+            radius = size * (1 - i / (detail + 1))
+            extra_points.append(
+                (x + radius * math.cos(angle),
+                 y + size // 1.5 + radius * math.sin(angle))
+            )
+
+        # Объединение точек
+        all_points = main_points + extra_points[::-1]
+
+        # Рисование капли воды
+        pygame.draw.polygon(screen, blue, all_points)
+
+        # Многоуровневые блики
+        pygame.draw.circle(screen, (200, 200, 255), (int(x), int(y - size // 4)), size // 3)
+        pygame.draw.circle(screen, (255, 255, 255), (int(x), int(y - size // 3)), size // 6)
+
+        # Эффект преломления света
+        refraction_size = size // 8
+        pygame.draw.circle(screen, (150, 150, 255), (int(x + refraction_size), int(y - size // 2)), refraction_size)
+        pygame.draw.circle(screen, (180, 180, 255), (int(x - refraction_size), int(y - size // 2)), refraction_size // 10)
+
+        # Микро-трещины (для крупных капель)
+        if size > 30:
+            crack1 = [(x - size // 6, y - size // 4), (x + size // 6, y + size // 4)]
+            crack2 = [(x + size // 6, y - size // 4), (x - size // 6, y + size // 4)]
+            pygame.draw.lines(screen, (150, 150, 255), False, crack1, 1)
+            pygame.draw.lines(screen, (150, 150, 255), False, crack2, 1)
+
+def draw_player():
+    pygame.draw.rect(screen, red, (player_pos[0], player_pos[1], player_size, player_size))
+
+def draw_score():
+    font = pygame.font.SysFont(None, 30)
+    text = font.render("Счет: " + str(score), True, (0, 0, 0))
+    screen.blit(text, (10, 10))
+
+def draw_time():
+    if not game_over:
+        current_time = time.time()
+    elapsed_time = current_time - start_time
+    font = pygame.font.SysFont(None, 30)
+    text = font.render(
+        "Время: " + str(int(elapsed_time)) + "." + str(int((elapsed_time - int(elapsed_time)) * 1000)),
+        True,
+        (0, 0, 0))
+    screen.blit(text, (10, 40))
+
+def draw_game_over():
+    if game_over:
+        game_over_rect.y -= 5
+    if game_over_rect.y < screen_height // 2 - game_over_rect.height // 2:
+        game_over_rect.y = screen_height // 2 - game_over_rect.height // 2
+    pygame.draw.rect(screen, white, game_over_rect)
+    screen.blit(game_over_text, (game_over_rect.x + 50, game_over_rect.y + 25))
+
+def main():
+    clock = pygame.time.Clock()
+    background = generate_background()
+    screen.blit(background, (0, 0))
+
+    # Основной цикл программы
+    running = True
+    while running:
+        running = handle_events()
+        add_new_drops()
+        update_drops()
+        remove_out_of_screen_drops()
+        handle_player_movement()
+        check_collision()
+        check_win_condition()
+
+        # Очистка экрана
+        screen.fill(black)
+
+        draw_drops()
+        draw_player()
+        draw_score()
+        draw_time()
+        draw_game_over()
+
+        # Обновление экрана
+        pygame.display.flip()
+
+        # Ограничение частоты кадров
+        clock.tick(60)
+
+    pygame.quit()
 
